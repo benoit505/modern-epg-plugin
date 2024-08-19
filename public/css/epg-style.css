@@ -1,0 +1,179 @@
+/* Layout */
+.epg-page-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    padding-top: 40px;
+}
+
+.control-buttons {
+    position: fixed;
+    top: 10px;
+    left: 5px;
+    background-color: rgba(240, 240, 240, 0.9);
+    padding: 2px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    z-index: 1000;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border-radius: 3px;
+}
+
+.epg-container {
+    margin-top: 5px;
+    margin-left: 30px;
+    flex-grow: 1;
+}
+
+/* Button Styles */
+.power-button {
+    margin-bottom: 2px;
+    padding: 2px;
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    background-color: transparent;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.power-icon {
+    width: 16px;
+    height: 16px;
+}
+
+/* EPG Styles */
+.epg {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-x: hidden;
+}
+
+.channel {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    align-items: center;
+}
+
+.channel-info {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 80px;
+    flex-shrink: 0;
+}
+
+.channel-logo {
+    width: auto;
+    height: 65px;
+    object-fit: contain;
+    margin-right: 10px;
+}
+
+.channel-name {
+    font-weight: bold;
+    font-size: 16px;
+}
+
+.programme-list-container {
+    flex-grow: 1;
+    overflow-x: auto;
+    width: 100%;
+}
+
+.programme-list {
+    display: grid;
+    grid-template-columns: repeat(252, minmax(20px, 1fr)); /* Adjust based on your needs */
+    gap: 1px;
+}
+
+.programme {
+    background-color: #3a3a3a;
+    color: #fff;
+    border-radius: 2px;
+    padding: 2px;
+    overflow: hidden;
+    position: relative;
+    height: 50px;
+    cursor: pointer;
+    min-width: 25px;
+}
+
+.programme-time {
+    font-size: 12px;
+    color: #ccc;
+}
+
+.programme-title {
+    font-size: 14px;
+    font-weight: bold;
+    margin-top: 5px;
+}
+
+.programme-sub-title {
+    font-size: 12px;
+    margin-top: 2px;
+}
+
+/* Highlight Styles */
+.current-program {
+    border: 2px solid red;
+}
+
+.highlighted-channel {
+    background-color: green;
+}
+
+.current-channel {
+    background-color: rgba(0, 255, 0, 0.2);
+}
+
+/* Popup Styles */
+.popup-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.popup {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 5px;
+    max-width: 500px;
+    text-align: center;
+}
+
+.popup h3, .popup h4 {
+    margin: 0 0 10px;
+}
+
+.popup p {
+    margin: 10px 0;
+}
+
+.close-popup {
+    background-color: #f44336;
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    border-radius: 5px;
+    font-size: 14px;
+}
+
+.close-popup:hover {
+    background-color: #d32f2f;
+}

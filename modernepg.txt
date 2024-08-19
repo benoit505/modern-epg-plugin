@@ -1,0 +1,57 @@
+Folder PATH listing for volume wordpress
+Volume serial number is F18B-BD80
+Y:.
+¦   dirmodernepg.txt
+¦   modern-epg-plugin.php
+¦   modernepg.txt
+¦   test-rest-api.php
+¦   test-rest.php
+¦   
++---admin
+¦   ¦   class-epg-admin.php
+¦   ¦   class-modern-epg-admin.php
+¦   ¦   
+¦   +---css
+¦   ¦       epg-admin.css
+¦   ¦       
+¦   +---js
+¦           epg-admin.js
+¦           
++---images
++---includes
+¦   ¦   class-epg-api.php
+¦   ¦   class-modern-epg-i18n.php
+¦   ¦   class-modern-epg-loader.php
+¦   ¦   class-modern-epg-utils.php
+¦   ¦   
+¦   +---controllers
+¦   ¦       class-epg-controller.php
+¦   ¦       
+¦   +---models
+¦   ¦       class-epg-data-model.php
+¦   ¦       
+¦   +---views
+¦           class-epg-shortcode.php
+¦           class-epg-view.php
+¦           
++---languages
+¦       modern-epg-plugin-en_US.mo
+¦       modern-epg-plugin-en_US.po
+¦       
++---logs
+¦       channels.log
+¦       programs.log
+¦       view.log
+¦       
++---public
+¦   ¦   class-modern-epg-public.php
+¦   ¦   
+¦   +---css
+¦   ¦       epg-style.css
+¦   ¦       
+¦   +---js
+¦           epg-frontend.js
+¦           
++---templates
+        epg-display.php
+        

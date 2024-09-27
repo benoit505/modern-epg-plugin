@@ -6,21 +6,27 @@ class EPG_View {
         $this->view_log_file = MODERN_EPG_PLUGIN_DIR . 'logs/view.log';
     }
 
-    public function render_grid($channels, $programs) {
-        if (empty($channels) || empty($programs)) {
-            $this->log_error('No EPG data available.');
-            return '<p>No EPG data available.</p>';
-        }
-
+    public function render_filter_buttons() {
         ob_start();
-        include MODERN_EPG_PLUGIN_DIR . 'templates/epg-display.php';
+        include MODERN_EPG_PLUGIN_DIR . 'templates/filter-buttons.php';
+        return ob_get_clean();
+    }
+
+    public function render_grid($channels, $programs, $channel_map) {
+        ob_start();
+        include MODERN_EPG_PLUGIN_DIR . 'templates/epg-grid.php';
+        return ob_get_clean();
+    }
+
+    public function render_full_epg($channels, $programs, $channel_map, $current_group = 'all') {
+        ob_start();
+        include MODERN_EPG_PLUGIN_DIR . 'templates/full-epg-display.php';
         $output = ob_get_clean();
-
+        
         if (empty($output)) {
-            $this->log_error('Failed to render EPG template.');
-            return '<p>Error rendering EPG.</p>';
+            error_log('EPG View: Empty output from full-epg-display.php');
         }
-
+        
         return $output;
     }
 

@@ -76,6 +76,10 @@ class Modern_EPG_Plugin {
         add_action('wp_ajax_nopriv_update_epg', array($this->controller, 'update_epg'));
         add_action('wp_ajax_switch_channel', array($this->controller, 'switch_channel'));
         add_action('wp_ajax_nopriv_switch_channel', array($this->controller, 'switch_channel'));
+
+        // Add this line
+        add_action('wp_ajax_get_current_channel', array($this->controller, 'get_current_channel'));
+        add_action('wp_ajax_nopriv_get_current_channel', array($this->controller, 'get_current_channel'));
     }
 
     public function enqueue_styles() {

@@ -1,39 +1,38 @@
 <div class="epg-container">
     <div class="epg" id="epg-container">
-        <?php
-        $current_time = time();
-        $start_time = $current_time - (15 * 60); // 15 minutes ago
-        $end_time = $current_time + (3 * 60 * 60); // 3 hours from now
-
-        foreach ($channels as $channel): 
-            $channel_programs = $programs[$channel['id']] ?? [];
-        ?>
+        <?php foreach ($channels as $channel): ?>
             <div class="channel" data-channel-number="<?php echo esc_attr($channel['number']); ?>">
                 <div class="channel-info">
                     <img class="channel-logo" src="<?php echo esc_url($channel['logo']); ?>" alt="Channel <?php echo esc_attr($channel['number']); ?>">
+                    <div class="channel-name"><?php echo esc_html($channel['name']); ?></div>
                 </div>
                 <div class="programme-list-container">
                     <div class="programme-list">
-                        <?php foreach ($channel_programs as $program):
-                            if ($program['stop'] < $start_time || $program['start'] > $end_time) continue;
+                        <?php 
+                        $start_time = strtotime('today midnight');
+                        $minutes_per_column = 5; // 5 minutes per column
+                        $total_columns = 24 * 60 / $minutes_per_column; // 24 hours, 288 columns
 
-                            $start_minutes = max(0, ($program['start'] - $start_time) / 60);
-                            $end_minutes = min(180, ($program['stop'] - $start_time) / 60);
-                            $grid_column_start = round($start_minutes) + 1;
-                            $grid_column_end = round($end_minutes) + 1;
+                        foreach ($channel_programs as $program):
+                            $program_start = max($start_time, $program['start']);
+                            $program_end = min($start_time + 86400, $program['stop']); // 86400 seconds in a day
 
-                            $is_current_program = ($current_time >= $program['start'] && $current_time < $program['stop']) ? 'current-program' : '';
+                            $start_column = (($program_start - $start_time) / 60) / $minutes_per_column + 1;
+                            $end_column = (($program_end - $start_time) / 60) / $minutes_per_column + 1;
+                            $span = $end_column - $start_column;
                         ?>
-                            <div class="programme <?php echo $is_current_program; ?>" 
-                                 data-channel="<?php echo esc_attr($channel['id']); ?>"
+                            <div class="programme" 
+                                 data-start-time="<?php echo date('Y-m-d\TH:i:sP', $program['start']); ?>"
+                                 data-end-time="<?php echo date('Y-m-d\TH:i:sP', $program['stop']); ?>"
                                  data-title="<?php echo esc_attr($program['title']); ?>"
-                                 data-sub-title="<?php echo esc_attr($program['sub-title']); ?>"
-                                 data-description="<?php echo esc_attr($program['desc']); ?>"
-                                 data-start-time="<?php echo esc_attr(date('H:i', $program['start'])); ?>"
-                                 data-end-time="<?php echo esc_attr(date('H:i', $program['stop'])); ?>"
-                                 style="grid-column: <?php echo $grid_column_start . ' / ' . $grid_column_end; ?>;">
-                                <div class="programme-time"><?php echo date('H:i', $program['start']) . ' – ' . date('H:i', $program['stop']); ?></div>
+                                 style="grid-column: <?php echo $start_column . ' / span ' . $span; ?>;">
+                                <div class="programme-time">
+                                    <?php echo date('H:i', $program['start']) . ' - ' . date('H:i', $program['stop']); ?>
+                                </div>
                                 <div class="programme-title"><?php echo esc_html($program['title']); ?></div>
+                                <?php if (!empty($program['sub-title'])): ?>
+                                    <div class="programme-sub-title"><?php echo esc_html($program['sub-title']); ?></div>
+                                <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
                     </div>

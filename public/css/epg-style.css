@@ -59,13 +59,21 @@
 }
 
 .channel-info {
-    width: 100px;
+    width: 70px; /* Slightly wider than the logo to accommodate padding */
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-right: 10px; /* Space between channel info and program list */
 }
 
 .channel-logo {
-    max-width: 100%;
-    height: auto;
+    width: 60px;  /* Set a fixed width */
+    height: 60px; /* Set a fixed height */
+    object-fit: contain; /* This ensures the image keeps its aspect ratio */
+    background-color: #f0f0f0; /* Light grey background for logos */
+    border: 1px solid #ddd; /* Light border around logos */
+    padding: 2px; /* Small padding inside the border */
 }
 
 .programme-list-container {
@@ -179,8 +187,8 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    margin-bottom: 10px;
-    padding: 10px 0;
+    margin-bottom: 12.5px; /* Increased from 10px if needed */
+    padding: 12.5px 0; /* Increased from 10px 0 if needed */
     background-color: #f0f0f0;
     position: sticky;
     top: 0;
@@ -189,26 +197,33 @@
 
 .group-filter {
     margin: 0 5px;
-    padding: 5px 10px;
+    padding: 6.25px 12.5px; /* Increased from 5px 10px */
     background-color: #fff;
     border: 1px solid #ccc;
-    border-radius: 5px;
+    border-radius: 4px;
     cursor: pointer;
-    transition: background-color 0.3s;
-}
-
-.group-filter:hover {
-    background-color: #e0e0e0;
+    font-size: 15px; /* Increased from 12px (assuming original size was 12px) */
+    transition: background-color 0.3s ease;
 }
 
 .group-filter img {
-    width: 20px;
-    height: 20px;
+    width: 25px; /* Increased from 20px */
+    height: 25px; /* Increased from 20px */
     vertical-align: middle;
-    margin-right: 5px;
+    margin-right: 6.25px; /* Increased from 5px */
 }
 
 .group-filter.active {
     background-color: #4CAF50;
     color: white;
+}
+
+.channel-name {
+    font-size: 12px;
+    text-align: center;
+    margin-top: 5px;
+    max-width: 70px; /* Match width of channel-info */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }

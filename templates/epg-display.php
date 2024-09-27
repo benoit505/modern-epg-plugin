@@ -3,7 +3,9 @@
         <?php foreach ($channels as $channel): ?>
             <div class="channel" data-channel-number="<?php echo esc_attr($channel['number']); ?>">
                 <div class="channel-info">
-                    <img class="channel-logo" src="<?php echo esc_url($channel['logo']); ?>" alt="Channel <?php echo esc_attr($channel['number']); ?>">
+                    <a href="#" class="channel-link" data-channel-name="<?php echo esc_attr($channel['name']); ?>" data-kodi-channel-id="<?php echo esc_attr($channel['kodi_id'] ?? ''); ?>">
+                        <img class="channel-logo" src="<?php echo esc_url($channel['logo']); ?>" alt="<?php echo esc_attr($channel['name']); ?>">
+                    </a>
                     <div class="channel-name"><?php echo esc_html($channel['name']); ?></div>
                 </div>
                 <div class="programme-list-container">

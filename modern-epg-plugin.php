@@ -80,6 +80,10 @@ class Modern_EPG_Plugin {
         // Add this line
         add_action('wp_ajax_get_current_channel', array($this->controller, 'get_current_channel'));
         add_action('wp_ajax_nopriv_get_current_channel', array($this->controller, 'get_current_channel'));
+
+        // Add new AJAX actions
+        add_action('wp_ajax_check_kodi_availability', [$this->controller, 'check_kodi_availability']);
+        add_action('wp_ajax_nopriv_check_kodi_availability', [$this->controller, 'check_kodi_availability']);
     }
 
     public function enqueue_styles() {

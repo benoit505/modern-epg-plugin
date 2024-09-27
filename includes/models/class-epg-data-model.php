@@ -20,54 +20,60 @@ class EPG_Data_Model {
     }
 
     public function get_epg_data() {
-        $cached_epg_data = get_transient('modern_epg_data');
-        $cached_kodi_mapping = get_transient('modern_kodi_channel_mapping');
-        $current_time = time();
+        try {
+            error_log('EPG Data Model: Starting get_epg_data');
+            $cached_epg_data = get_transient('modern_epg_data');
+            $current_time = time();
 
-        if ($cached_epg_data === false) {
-            $xml_data = $this->fetch_xml_data();
-            $m3u_data = $this->fetch_m3u_data();
-            
-            if ($xml_data === false || $m3u_data === false) {
-                error_log("Failed to fetch XML or M3U data");
-                return false;
-            }
+            if ($cached_epg_data === false) {
+                error_log('EPG Data Model: No cached data, fetching fresh data');
+                
+                $xml_data = $this->fetch_xml_data();
+                if ($xml_data === false) {
+                    throw new Exception("Failed to fetch XML data");
+                }
 
-            $epg_data = $this->parse_epg_data($xml_data, $m3u_data);
-            $channels_with_groups = $this->parse_m3u($m3u_data);
+                $m3u_data = $this->fetch_m3u_data();
+                if ($m3u_data === false) {
+                    throw new Exception("Failed to fetch M3U data");
+                }
 
-            // Merge group information into EPG data
-            foreach ($epg_data['channels'] as &$channel) {
-                $matching_channel = array_filter($channels_with_groups, function($c) use ($channel) {
-                    return $c['id'] === $channel['id'];
-                });
-                if (!empty($matching_channel)) {
-                    $matching_channel = reset($matching_channel);
-                    $channel['group'] = $matching_channel['group'];
-                } else {
-                    $channel['group'] = 'Uncategorized';
+                $epg_data = $this->parse_epg_data($xml_data, $m3u_data);
+                if ($epg_data === false) {
+                    throw new Exception("Failed to parse EPG data");
+                }
+
+                $epg_data['last_updated'] = $current_time;
+                
+                // Ensure channel_map exists, even if empty
+                if (!isset($epg_data['channel_map'])) {
+                    $epg_data['channel_map'] = [];
+                }
+
+                set_transient('modern_epg_data', $epg_data, HOUR_IN_SECONDS);
+            } else {
+                error_log('EPG Data Model: Using cached data');
+                $epg_data = $cached_epg_data;
+                
+                // Ensure channel_map exists in cached data, even if empty
+                if (!isset($epg_data['channel_map'])) {
+                    $epg_data['channel_map'] = [];
                 }
             }
 
-            $epg_data['last_updated'] = $current_time;
-            set_transient('modern_epg_data', $epg_data, HOUR_IN_SECONDS);
-        } else {
-            $epg_data = $cached_epg_data;
-        }
+            // Debug information
+            error_log('EPG Data Model: Channels: ' . count($epg_data['channels']) . ', Programs: ' . count($epg_data['programs']) . ', Channel Map: ' . count($epg_data['channel_map']));
 
-        // Always fetch fresh Kodi channel data
-        $kodi_channels = $this->get_kodi_channels();
-        if ($kodi_channels !== false) {
-            $channel_map = $this->map_kodi_channels_to_epg($kodi_channels, $epg_data['channels']);
-            $epg_data['channel_map'] = $channel_map;
-            
-            // Cache the Kodi channel mapping separately
-            set_transient('modern_kodi_channel_mapping', $channel_map, 5 * MINUTE_IN_SECONDS);
-        } else {
-            $epg_data['channel_map'] = $cached_kodi_mapping !== false ? $cached_kodi_mapping : [];
-        }
+            // Ensure the data structure is correct
+            if (empty($epg_data['channels']) || empty($epg_data['programs'])) {
+                throw new Exception("EPG data is incomplete");
+            }
 
-        return $epg_data;
+            return $epg_data;
+        } catch (Exception $e) {
+            error_log('EPG Data Model Exception: ' . $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine());
+            return false;
+        }
     }
 
     public function get_channel_order_from_m3u($m3u_content) {
@@ -183,50 +189,18 @@ class EPG_Data_Model {
         return $date ? $date->getTimestamp() : 0;
     }
 
-    public function check_kodi_connection() {
-        $kodi_url = 'http://192.168.0.3:8080/jsonrpc'; // Replace with your Kodi URL
-        $username = 'benoit'; // Replace with your Kodi username
-        $password = '14235HOTmail'; // Replace with your Kodi password
+    public function check_kodi_availability() {
+        $ch = curl_init($this->kodi_url . ':' . $this->kodi_port);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 2);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
 
-        $command = json_encode([
-            'jsonrpc' => '2.0',
-            'method' => 'JSONRPC.Ping',
-            'id' => 1
-        ]);
-
-        $log_file = MODERN_EPG_PLUGIN_DIR . 'logs/kodi_connection.log';
-
-        error_log("Attempting to ping Kodi...\n", 3, $log_file);
-
-        $response = wp_remote_post($kodi_url, [
-            'body' => $command,
-            'headers' => [
-                'Content-Type' => 'application/json',
-                'Authorization' => 'Basic ' . base64_encode("$username:$password"),
-            ],
-            'timeout' => 5, // 5 second timeout for ping
-        ]);
-
-        if (is_wp_error($response)) {
-            error_log("Failed to connect to Kodi: " . $response->get_error_message() . "\n", 3, $log_file);
-            return false;
-        }
-
-        $body = wp_remote_retrieve_body($response);
-        $decoded_response = json_decode($body, true);
-
-        error_log("Kodi ping response: " . print_r($decoded_response, true) . "\n", 3, $log_file);
-
-        if (isset($decoded_response['result']) && $decoded_response['result'] === 'pong') {
-            error_log("Successfully pinged Kodi\n", 3, $log_file);
-            return true;
-        } else {
-            error_log("Failed to ping Kodi. Unexpected response.\n", 3, $log_file);
-            return false;
-        }
+        return ($http_code >= 200 && $http_code < 300);
     }
 
-    public function get_kodi_channels() {
+    public function get_kodi_channel_mapping() {
         $kodi_url = 'http://192.168.0.3:8080/jsonrpc'; // Replace with your Kodi URL
         $username = 'benoit'; // Replace with your Kodi username
         $password = '14235HOTmail'; // Replace with your Kodi password

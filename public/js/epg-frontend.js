@@ -1,4 +1,4 @@
-const debugMode = false; // Set this to false to disable most console logs
+let debugMode = false;
 
 function logDebug(...args) {
     if (debugMode) {
@@ -10,18 +10,25 @@ function initializeEPG() {
     logDebug('Initializing EPG');
     attachListeners();
     scrollToCurrentTime();
-    getCurrentChannel();
     applyStoredFilter();
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-    logDebug('DOMContentLoaded event fired');
+    console.log('DOM fully loaded');
+    console.log('EPG container:', document.getElementById('modern-epg-container'));
+    
+    const channelLinks = document.querySelectorAll('.channel-link');
+    console.log('Found ' + channelLinks.length + ' channel links');
+    
+    if (channelLinks.length === 0) {
+        console.log('EPG HTML structure:', document.getElementById('modern-epg-container').innerHTML);
+    }
+    
     initializeEPG();
     
     // Set up intervals
     setInterval(updateEPG, 3 * 60 * 1000); // Every 3 minutes
     setInterval(adjustProgramBoxes, 60 * 1000); // Every minute
-    setInterval(getCurrentChannel, 10000); // Every 10 seconds
 });
 
 function attachListeners() {
@@ -49,8 +56,8 @@ function attachListeners() {
     channelLinks.forEach(link => {
         link.addEventListener('click', function(e) {
             e.preventDefault();
-            const kodiChannelId = this.dataset.kodiChannelId;
             const channelName = this.dataset.channelName;
+            const kodiChannelId = this.dataset.kodiChannelId;
             logDebug('Channel link clicked:', channelName, 'Kodi Channel ID:', kodiChannelId);
             if (kodiChannelId && kodiChannelId !== "") {
                 switchKodiChannel(kodiChannelId);
@@ -171,53 +178,6 @@ function adjustProgramBoxes() {
     // logDebug('Adjusted program boxes at', now);
 }
 
-function getCurrentChannel() {
-    logDebug('Fetching current channel...');
-    fetch(modernEpgData.ajax_url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-            action: 'get_current_channel',
-            nonce: modernEpgData.nonce
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        logDebug('Current channel response:', data);
-        if (data.success) {
-            currentChannelNumber = data.data.channel;
-            highlightCurrentChannel();
-        } else {
-            console.warn('Failed to get current channel:', data.data.message);
-            currentChannelNumber = null;
-            highlightCurrentChannel();
-        }
-    })
-    .catch(error => {
-        console.error('Error fetching current channel:', error.message);
-        currentChannelNumber = null;
-        highlightCurrentChannel();
-    });
-}
-
-function highlightCurrentChannel() {
-    document.querySelectorAll('.channel').forEach(channel => {
-        channel.classList.remove('current-channel');
-        if (currentChannelNumber && channel.dataset.channelNumber === currentChannelNumber) {
-            channel.classList.add('current-channel');
-        }
-    });
-
-    document.querySelectorAll('.programme').forEach(program => {
-        program.classList.remove('current-program');
-        if (currentChannelNumber && program.dataset.channelNumber === currentChannelNumber) {
-            program.classList.add('current-program');
-        }
-    });
-}
-
 function scrollToCurrentTime() {
     const now = new Date();
     const startOfHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0);
@@ -254,36 +214,6 @@ function filterChannelsByGroup(group) {
     // Store the selected category in localStorage
     localStorage.setItem('selectedEpgGroup', group);
     logDebug('Stored selected group:', group);
-}
-
-function switchKodiChannel(channel) {
-    logDebug('Attempting to switch to Kodi channel:', channel);
-    fetch(modernEpgData.ajax_url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-            action: 'switch_channel',
-            nonce: modernEpgData.nonce,
-            channel: channel
-        })
-    })
-    .then(response => {
-        logDebug('Raw response:', response);
-        return response.json();
-    })
-    .then(data => {
-        logDebug('Switch channel response:', data);
-        if (data.success) {
-            logDebug('Channel switched successfully');
-        } else {
-            console.error('Failed to switch channel:', data.data ? data.data.message : 'Unknown error');
-        }
-    })
-    .catch(error => {
-        console.error('Error switching channel:', error);
-    });
 }
 
 function showProgramDetails(event) {

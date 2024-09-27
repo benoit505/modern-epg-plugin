@@ -22,23 +22,25 @@ class EPG_Controller {
         try {
             $epg_data = $this->model->get_epg_data();
             if ($epg_data === false) {
-                error_log('EPG Controller: Error fetching EPG data');
-                return 'Error fetching EPG data.';
+                error_log('EPG Controller: Failed to fetch EPG data');
+                return '<div class="epg-error">Error: Unable to load EPG data. Please try again later.</div>';
             }
             
             $channels = $epg_data['channels'] ?? [];
             $programs = $epg_data['programs'] ?? [];
             $channel_map = $epg_data['channel_map'] ?? [];
             
-            // Remove or comment out these debug logs
-            // error_log('Channels: ' . print_r($channels, true));
-            // error_log('Programs: ' . print_r($programs, true));
-            // error_log('Channel Map: ' . print_r($channel_map, true));
+            error_log('EPG Controller: Channels: ' . count($channels) . ', Programs: ' . count($programs) . ', Channel Map: ' . count($channel_map));
+            
+            if (empty($channels) || empty($programs)) {
+                error_log('EPG Controller: Empty channels or programs');
+                return '<div class="epg-error">Error: No EPG data available.</div>';
+            }
             
             return $this->view->render_full_epg($channels, $programs, $channel_map);
         } catch (Exception $e) {
-            error_log('EPG Controller Exception: ' . $e->getMessage());
-            return 'An error occurred while rendering the EPG.';
+            error_log('EPG Controller Exception: ' . $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine());
+            return '<div class="epg-error">An error occurred while rendering the EPG.</div>';
         }
     }
 
@@ -46,12 +48,17 @@ class EPG_Controller {
         try {
             $epg_data = $this->model->get_epg_data();
             if ($epg_data === false) {
+                error_log('EPG Controller: Failed to fetch EPG data');
                 wp_send_json_error(['message' => 'Failed to fetch EPG data']);
                 return;
             }
-            $channels = $epg_data['channels'];
-            $programs = $epg_data['programs'];
-            $channel_map = $epg_data['channel_map'];
+            
+            $channels = $epg_data['channels'] ?? [];
+            $programs = $epg_data['programs'] ?? [];
+            $channel_map = $epg_data['channel_map'] ?? [];
+            
+            // Debug information
+            error_log('EPG Controller: Channels: ' . count($channels) . ', Programs: ' . count($programs) . ', Channel Map: ' . count($channel_map));
             
             // Get the current group from the AJAX request
             $current_group = isset($_POST['group']) ? sanitize_text_field($_POST['group']) : 'all';
@@ -59,8 +66,8 @@ class EPG_Controller {
             $full_epg = $this->view->render_full_epg($channels, $programs, $channel_map, $current_group);
             wp_send_json_success(['html' => $full_epg]);
         } catch (Exception $e) {
-            error_log('EPG Update Error: ' . $e->getMessage());
-            wp_send_json_error(['message' => 'An error occurred while updating the EPG']);
+            error_log('EPG Update Error: ' . $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine());
+            wp_send_json_error(['message' => 'An error occurred while updating the EPG: ' . $e->getMessage()]);
         }
     }
 
@@ -104,9 +111,27 @@ class EPG_Controller {
         if ($current_channel !== false) {
             wp_send_json_success(['channel' => $current_channel]);
         } else {
-            $error_message = method_exists($this->model, 'get_last_error') ? $this->model->get_last_error() : 'Unknown error';
-            error_log('EPG Controller: ' . $error_message); // Log the error server-side
-            wp_send_json_error(['message' => 'Failed to fetch current channel: ' . $error_message]);
+            wp_send_json_error(['message' => 'Kodi is currently unavailable']);
+        }
+    }
+
+    public function check_kodi_availability() {
+        try {
+            if (!check_ajax_referer('modern_epg_nonce', 'nonce', false)) {
+                error_log('EPG Controller: Nonce check failed in check_kodi_availability');
+                wp_send_json_error(['message' => 'Security check failed']);
+                return;
+            }
+
+            $kodi_available = $this->model->check_kodi_availability();
+            if ($kodi_available) {
+                wp_send_json_success();
+            } else {
+                wp_send_json_error(['message' => 'Kodi is not available']);
+            }
+        } catch (Exception $e) {
+            error_log('EPG Controller Exception in check_kodi_availability: ' . $e->getMessage());
+            wp_send_json_error(['message' => 'An error occurred while checking Kodi availability']);
         }
     }
 }

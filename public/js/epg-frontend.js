@@ -125,9 +125,10 @@ function updateEPG() {
             if (epgContainer) {
                 epgContainer.innerHTML = data.data.html;
                 logDebug('EPG HTML updated');
-                initializeEPG();
-                filterChannelsByGroup(currentGroup); // Re-apply the filter
-                updateActiveGroupButton(currentGroup); // Update the active button
+                initializeEPG(); // This will reattach all listeners
+                // Remove these lines as initializeEPG will handle them
+                // filterChannelsByGroup(currentGroup);
+                // updateActiveGroupButton(currentGroup);
             } else {
                 logDebug('EPG container not found in the DOM');
             }
@@ -139,10 +140,12 @@ function updateEPG() {
 }
 
 function updateActiveGroupButton(group) {
+    logDebug('Updating active group button:', group);
     const buttons = document.querySelectorAll('.group-filter');
     buttons.forEach(button => {
-        if (button.dataset.group === group) {
+        if (button.dataset.group.toLowerCase() === group.toLowerCase()) {
             button.classList.add('active');
+            logDebug('Activated button:', button.dataset.group);
         } else {
             button.classList.remove('active');
         }
@@ -153,29 +156,18 @@ function adjustProgramBoxes() {
     const now = new Date();
     const programBoxes = document.querySelectorAll('.programme');
     const gridStartTime = new Date(now);
-    gridStartTime.setMinutes(0, 0, 0);
+    gridStartTime.setHours(0, 0, 0, 0);
 
     programBoxes.forEach(box => {
         const startTime = new Date(box.dataset.startTime);
         const endTime = new Date(box.dataset.endTime);
+        
+        const startColumn = Math.floor((startTime - gridStartTime) / (5 * 60 * 1000)) + 2; // +2 because grid starts at column 2
+        const endColumn = Math.floor((endTime - gridStartTime) / (5 * 60 * 1000)) + 2;
+        const span = endColumn - startColumn;
 
-        // Calculate position and width
-        const leftPosition = (startTime - gridStartTime) / (3600 * 1000) * (100 / 3);
-        const width = (endTime - startTime) / (3600 * 1000) * (100 / 3);
-
-        box.style.left = `${leftPosition}%`;
-        box.style.width = `${width}%`;
-
-        // Highlight current program
-        if (now >= startTime && now < endTime) {
-            box.classList.add('current-program');
-        } else {
-            box.classList.remove('current-program');
-        }
+        box.style.gridColumn = `${startColumn} / span ${span}`;
     });
-
-    // Remove this line to reduce logging
-    // logDebug('Adjusted program boxes at', now);
 }
 
 function scrollToCurrentTime() {
@@ -253,3 +245,85 @@ function closePopup() {
         popup.remove();
     }
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM fully loaded');
+
+    const settingsButton = document.getElementById('epg-settings-button');
+    const settingsOverlay = document.getElementById('epg-settings-overlay');
+    const settingsForm = document.getElementById('epg-settings-form');
+    const closeButton = document.getElementById('epg-settings-close');
+
+    console.log('Settings button:', settingsButton);
+    console.log('Settings overlay:', settingsOverlay);
+    console.log('Settings form:', settingsForm);
+    console.log('Close button:', closeButton);
+
+    if (settingsButton && settingsOverlay && settingsForm && closeButton) {
+        console.log('All required elements found');
+
+        settingsButton.addEventListener('click', function(e) {
+            console.log('Settings button clicked');
+            e.preventDefault();
+            settingsOverlay.style.display = 'block';
+            console.log('Overlay display style:', settingsOverlay.style.display);
+        });
+
+        closeButton.addEventListener('click', function(e) {
+            console.log('Close button clicked');
+            e.preventDefault();
+            settingsOverlay.style.display = 'none';
+            console.log('Overlay display style:', settingsOverlay.style.display);
+        });
+
+        settingsOverlay.addEventListener('click', function(e) {
+            if (e.target === settingsOverlay) {
+                console.log('Overlay background clicked');
+                settingsOverlay.style.display = 'none';
+                console.log('Overlay display style:', settingsOverlay.style.display);
+            }
+        });
+
+        settingsForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(settingsForm);
+            formData.append('action', 'save_epg_settings');
+            formData.append('nonce', modernEpgData.nonce);
+
+            fetch(modernEpgData.ajax_url, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Settings saved successfully!');
+                    settingsOverlay.style.display = 'none';
+                } else {
+                    alert('Error saving settings: ' + data.data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while saving settings.');
+            });
+        });
+    } else {
+        console.error('One or more required elements are missing');
+    }
+});
+
+// Log any JavaScript errors
+window.onerror = function(message, source, lineno, colno, error) {
+    console.error('JavaScript error:', message, 'at', source, lineno, colno);
+    console.error('Error object:', error);
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+    const epgContainer = document.getElementById('modern-epg-container');
+    const currentTime = new Date();
+    const scrollPosition = (currentTime.getHours() * 60 + currentTime.getMinutes() - 30) / (3 * 60) * epgContainer.scrollWidth;
+    epgContainer.scrollLeft = scrollPosition;
+
+    // Add other event listeners and functionality as needed
+});

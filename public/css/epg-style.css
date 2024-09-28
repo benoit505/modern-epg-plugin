@@ -49,22 +49,24 @@
 
 /* EPG Styles */
 .epg {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 100px repeat(36, 1fr); /* 100px for channel info, 36 columns for 3 hours */
+    gap: 1px;
 }
 
 .channel {
-    display: flex;
-    margin-bottom: 10px;
+    display: contents;
 }
 
 .channel-info {
-    width: 70px; /* Slightly wider than the logo to accommodate padding */
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin-right: 10px; /* Space between channel info and program list */
+    grid-column: 1;
+    grid-row: span 1;
+    position: sticky;
+    left: 0;
+    background: white;
+    z-index: 10;
+    padding: 5px;
+    text-align: center;
 }
 
 .channel-logo {
@@ -77,9 +79,17 @@
 }
 
 .programme-list-container {
-    overflow-x: auto;
-    width: 100%;
-    margin-left: 10px; /* Add space between channel icons and program boxes */
+    grid-column: 2 / -1;
+    display: contents;
+}
+
+.programme {
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    padding: 5px;
+    overflow: hidden;
+    min-height: 50px;
+    grid-row: span 1;
 }
 
 .programme-list {
@@ -118,20 +128,12 @@
 }
 
 .programme-time {
-    font-weight: bold;
-    font-size: 10px;
-    color: #3366cc; /* Dark blue for time */
-    width: 100%;
+    font-size: 0.8em;
+    color: #666;
 }
 
 .programme-title {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    color: #333;
     font-weight: bold;
-    font-size: 13px; /* Slightly bigger than before */
-    width: 100%;
 }
 
 .programme-sub-title {
@@ -141,7 +143,7 @@
 
 /* Highlight Styles */
 .current-program {
-    border: 2px solid red;
+    background-color: #e6f3ff;
 }
 
 .highlighted-channel {

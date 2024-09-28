@@ -13,6 +13,9 @@ class EPG_View {
     }
 
     public function render_grid($channels, $programs, $channel_map) {
+        // Ensure $programs is an array
+        $programs = is_array($programs) ? $programs : [];
+        
         ob_start();
         include MODERN_EPG_PLUGIN_DIR . 'templates/epg-grid.php';
         return ob_get_clean();

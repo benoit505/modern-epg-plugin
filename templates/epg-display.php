@@ -1,3 +1,8 @@
+<?php
+error_log('Channels: ' . print_r($channels, true));
+error_log('Programs: ' . print_r(array_slice($programs, 0, 2), true)); // First two channels' programs
+?>
+
 <div class="epg-container">
     <div class="epg" id="epg-container">
         <?php foreach ($channels as $channel): ?>
@@ -14,6 +19,8 @@
                         $start_time = strtotime('today midnight');
                         $minutes_per_column = 5; // 5 minutes per column
                         $total_columns = 24 * 60 / $minutes_per_column; // 24 hours, 288 columns
+
+                        $channel_programs = $programs[$channel['id']] ?? [];
 
                         foreach ($channel_programs as $program):
                             $program_start = max($start_time, $program['start']);

@@ -21,20 +21,20 @@ class EPG_Controller {
     public function render_epg() {
         try {
             $epg_data = $this->model->get_epg_data();
-            if ($epg_data === false) {
-                error_log('EPG Controller: Failed to fetch EPG data');
-                return '<div class="epg-error">Error: Unable to load EPG data. Please try again later.</div>';
+            if ($epg_data === false || !isset($epg_data['channels']) || !isset($epg_data['programs'])) {
+                error_log('EPG Controller: Failed to fetch EPG data or data is incomplete');
+                return '<div class="epg-error">Error: Unable to load EPG data. Please check your settings and try again.</div>';
             }
             
-            $channels = $epg_data['channels'] ?? [];
-            $programs = $epg_data['programs'] ?? [];
-            $channel_map = $epg_data['channel_map'] ?? [];
+            $channels = $epg_data['channels'];
+            $programs = $epg_data['programs'];
+            $channel_map = $this->model->get_kodi_channel_mapping() ?: [];
             
             error_log('EPG Controller: Channels: ' . count($channels) . ', Programs: ' . count($programs) . ', Channel Map: ' . count($channel_map));
             
-            if (empty($channels) || empty($programs)) {
-                error_log('EPG Controller: Empty channels or programs');
-                return '<div class="epg-error">Error: No EPG data available.</div>';
+            if (empty($channels)) {
+                error_log('EPG Controller: No channels available');
+                return '<div class="epg-error">Error: No channels available.</div>';
             }
             
             return $this->view->render_full_epg($channels, $programs, $channel_map);
@@ -57,10 +57,8 @@ class EPG_Controller {
             $programs = $epg_data['programs'] ?? [];
             $channel_map = $epg_data['channel_map'] ?? [];
             
-            // Debug information
             error_log('EPG Controller: Channels: ' . count($channels) . ', Programs: ' . count($programs) . ', Channel Map: ' . count($channel_map));
             
-            // Get the current group from the AJAX request
             $current_group = isset($_POST['group']) ? sanitize_text_field($_POST['group']) : 'all';
             
             $full_epg = $this->view->render_full_epg($channels, $programs, $channel_map, $current_group);
@@ -133,5 +131,46 @@ class EPG_Controller {
             error_log('EPG Controller Exception in check_kodi_availability: ' . $e->getMessage());
             wp_send_json_error(['message' => 'An error occurred while checking Kodi availability']);
         }
+    }
+
+    public function save_epg_settings() {
+        check_ajax_referer('modern_epg_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'You do not have permission to change these settings.']);
+            return;
+        }
+
+        $kodi_url = esc_url_raw($_POST['kodi_url']);
+        $kodi_port = intval($_POST['kodi_port']);
+        $kodi_username = sanitize_text_field($_POST['kodi_username']);
+        $kodi_password = $_POST['kodi_password'];
+        $xml_url = esc_url_raw($_POST['xml_url']);
+        $m3u_url = esc_url_raw($_POST['m3u_url']);
+
+        // Validate URLs
+        if (!filter_var($kodi_url, FILTER_VALIDATE_URL) || !filter_var($xml_url, FILTER_VALIDATE_URL) || !filter_var($m3u_url, FILTER_VALIDATE_URL)) {
+            wp_send_json_error(['message' => 'Invalid URL provided.']);
+            return;
+        }
+
+        // Validate port
+        if ($kodi_port < 1 || $kodi_port > 65535) {
+            wp_send_json_error(['message' => 'Invalid port number.']);
+            return;
+        }
+
+        // Encrypt password before storing
+        $encrypted_password = wp_hash_password($kodi_password);
+
+        // Save settings
+        update_option('modern_epg_kodi_url', $kodi_url);
+        update_option('modern_epg_kodi_port', $kodi_port);
+        update_option('modern_epg_kodi_username', $kodi_username);
+        update_option('modern_epg_kodi_password', $encrypted_password);
+        update_option('modern_epg_xml_url', $xml_url);
+        update_option('modern_epg_m3u_url', $m3u_url);
+
+        wp_send_json_success(['message' => 'Settings saved successfully.']);
     }
 }

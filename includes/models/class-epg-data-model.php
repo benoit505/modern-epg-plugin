@@ -1,8 +1,8 @@
 <?php
 
 class EPG_Data_Model {
-    private $xml_url = 'https://www.dropbox.com/scl/fi/olnk1zwz8pnugmdsl1457/live.xml?rlkey=dpk6ves6ok2ar4oyowtv8ay6j&dl=1';
-    private $m3u_url = 'https://www.dropbox.com/scl/fi/hftp0fhhm55ahtudtzgs2/live.m3u?rlkey=dykq053kvckkcy3z3l3kl61h6&dl=1';
+    private $xml_url;
+    private $m3u_url;
     private $timezone;
     private $kodi_url;
     private $kodi_port;
@@ -13,67 +13,69 @@ class EPG_Data_Model {
     public function __construct() {
         $this->timezone = new DateTimeZone('Europe/Brussels');
         date_default_timezone_set('Europe/Brussels');
-        $this->kodi_url = get_option('modern_epg_kodi_url', 'http://192.168.0.3');
+        $this->kodi_url = get_option('modern_epg_kodi_url', '');
         $this->kodi_port = get_option('modern_epg_kodi_port', '8080');
         $this->kodi_username = get_option('modern_epg_kodi_username', '');
         $this->kodi_password = get_option('modern_epg_kodi_password', '');
+        $this->xml_url = get_option('modern_epg_xml_url', '');
+        $this->m3u_url = get_option('modern_epg_m3u_url', '');
     }
 
     public function get_epg_data() {
-        try {
-            error_log('EPG Data Model: Starting get_epg_data');
-            $cached_epg_data = get_transient('modern_epg_data');
-            $current_time = time();
+        $cached_data = get_transient('modern_epg_data');
+        if (false !== $cached_data) {
+            return $cached_data;
+        }
 
-            if ($cached_epg_data === false) {
-                error_log('EPG Data Model: No cached data, fetching fresh data');
-                
-                $xml_data = $this->fetch_xml_data();
-                if ($xml_data === false) {
-                    throw new Exception("Failed to fetch XML data");
-                }
+        $xml_data = $this->fetch_xml_data();
+        $m3u_data = $this->fetch_m3u_data();
 
-                $m3u_data = $this->fetch_m3u_data();
-                if ($m3u_data === false) {
-                    throw new Exception("Failed to fetch M3U data");
-                }
-
-                $epg_data = $this->parse_epg_data($xml_data, $m3u_data);
-                if ($epg_data === false) {
-                    throw new Exception("Failed to parse EPG data");
-                }
-
-                $epg_data['last_updated'] = $current_time;
-                
-                // Ensure channel_map exists, even if empty
-                if (!isset($epg_data['channel_map'])) {
-                    $epg_data['channel_map'] = [];
-                }
-
-                set_transient('modern_epg_data', $epg_data, HOUR_IN_SECONDS);
-            } else {
-                error_log('EPG Data Model: Using cached data');
-                $epg_data = $cached_epg_data;
-                
-                // Ensure channel_map exists in cached data, even if empty
-                if (!isset($epg_data['channel_map'])) {
-                    $epg_data['channel_map'] = [];
-                }
-            }
-
-            // Debug information
-            error_log('EPG Data Model: Channels: ' . count($epg_data['channels']) . ', Programs: ' . count($epg_data['programs']) . ', Channel Map: ' . count($epg_data['channel_map']));
-
-            // Ensure the data structure is correct
-            if (empty($epg_data['channels']) || empty($epg_data['programs'])) {
-                throw new Exception("EPG data is incomplete");
-            }
-
+        if ($xml_data && $m3u_data) {
+            $epg_data = $this->parse_epg_data($xml_data, $m3u_data);
+            set_transient('modern_epg_data', $epg_data, HOUR_IN_SECONDS);
             return $epg_data;
-        } catch (Exception $e) {
-            error_log('EPG Data Model Exception: ' . $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine());
+        }
+
+        return false;
+    }
+
+    private function fetch_xml_data() {
+        $xml_url = get_option('modern_epg_xml_url', $this->xml_url);
+        $response = wp_remote_get($xml_url);
+
+        if (is_wp_error($response)) {
+            error_log('Failed to fetch XML data: ' . $response->get_error_message());
             return false;
         }
+
+        return simplexml_load_string(wp_remote_retrieve_body($response));
+    }
+
+    private function fetch_m3u_data() {
+        $m3u_url = get_option('modern_epg_m3u_url', $this->m3u_url);
+        $response = wp_remote_get($m3u_url);
+
+        if (is_wp_error($response)) {
+            error_log('Failed to fetch M3U data: ' . $response->get_error_message());
+            return false;
+        }
+
+        return wp_remote_retrieve_body($response);
+    }
+
+    private function parse_epg_data($xml_data, $m3u_data) {
+        $channels = $this->parse_m3u($m3u_data);
+        $programs = $this->parse_xml_programs($xml_data);
+
+        error_log('Parsed channels: ' . json_encode(array_slice($channels, 0, 2, true)));
+        error_log('Parsed programs: ' . json_encode(array_slice($programs, 0, 2, true)));
+        error_log('Total channels: ' . count($channels));
+        error_log('Total programs: ' . count($programs));
+
+        return [
+            'channels' => $channels,
+            'programs' => $programs,
+        ];
     }
 
     public function get_channel_order_from_m3u($m3u_content) {
@@ -102,93 +104,6 @@ class EPG_Data_Model {
         return $channel_info;
     }
 
-    private function fetch_xml_data() {
-        $response = wp_remote_get($this->xml_url);
-        if (is_wp_error($response)) {
-            error_log('Failed to fetch XML data: ' . $response->get_error_message());
-            return false;
-        }
-        return wp_remote_retrieve_body($response);
-    }
-
-    private function fetch_m3u_data() {
-        $response = wp_remote_get($this->m3u_url);
-        if (is_wp_error($response)) {
-            error_log('Failed to fetch M3U data: ' . $response->get_error_message());
-            return false;
-        }
-        return wp_remote_retrieve_body($response);
-    }
-
-    private function parse_epg_data($xml_data, $m3u_data) {
-        $xml = simplexml_load_string($xml_data);
-        if (!$xml) {
-            error_log('Failed to parse XML data');
-            return false;
-        }
-
-        $channels = $this->parse_m3u($m3u_data);
-        $programs = $this->parse_xml_programs($xml);
-
-        return [
-            'channels' => $channels,
-            'programs' => $programs,
-        ];
-    }
-
-    private function parse_m3u($m3u_content) {
-        $channels = [];
-        $lines = explode("\n", $m3u_content);
-
-        foreach ($lines as $line) {
-            if (strpos($line, '#EXTINF:') === 0) {
-                preg_match('/tvg-id="([^"]*)"/', $line, $id_match);
-                preg_match('/tvg-name="([^"]*)"/', $line, $name_match);
-                preg_match('/tvg-logo="([^"]*)"/', $line, $logo_match);
-                preg_match('/tvg-chno="([^"]*)"/', $line, $chno_match);
-                preg_match('/group-title="([^"]*)"/', $line, $group_match);
-                
-                $channel = [
-                    'id' => $id_match[1] ?? '',
-                    'name' => $name_match[1] ?? '',
-                    'logo' => $logo_match[1] ?? '',
-                    'number' => intval($chno_match[1] ?? '0'),
-                    'group' => $group_match[1] ?? 'Uncategorized'
-                ];
-                
-                $channels[] = $channel;
-            }
-        }
-
-        return $channels;
-    }
-    
-    private function parse_xml_programs($xml) {
-        $programs = [];
-
-        foreach ($xml->programme as $programme) {
-            $channel_id = (string) $programme['channel'];
-            $start = $this->parse_xml_date((string) $programme['start']);
-            $stop = $this->parse_xml_date((string) $programme['stop']);
-
-            $programs[$channel_id][] = [
-                'title' => (string) $programme->title,
-                'sub-title' => (string) $programme->{'sub-title'},
-                'desc' => (string) $programme->desc,
-                'start' => $start,
-                'stop' => $stop,
-            ];
-        }
-
-        return $programs;
-    }
-
-    private function parse_xml_date($date_string) {
-        // Parse date string in format "20240818055956 +0200"
-        $date = DateTime::createFromFormat('YmdHis O', $date_string, $this->timezone);
-        return $date ? $date->getTimestamp() : 0;
-    }
-
     public function check_kodi_availability() {
         $ch = curl_init($this->kodi_url . ':' . $this->kodi_port);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 2);
@@ -201,9 +116,9 @@ class EPG_Data_Model {
     }
 
     public function get_kodi_channel_mapping() {
-        $kodi_url = 'http://192.168.0.3:8080/jsonrpc'; // Replace with your Kodi URL
-        $username = 'benoit'; // Replace with your Kodi username
-        $password = '14235HOTmail'; // Replace with your Kodi password
+        $kodi_url = $this->kodi_url . ':' . $this->kodi_port . '/jsonrpc';
+        $username = $this->kodi_username;
+        $password = $this->kodi_password;
 
         $command = json_encode([
             'jsonrpc' => '2.0',
@@ -225,7 +140,7 @@ class EPG_Data_Model {
 
         if (is_wp_error($response)) {
             error_log('Failed to connect to Kodi: ' . $response->get_error_message());
-            return false;
+            return [];  // Return an empty array instead of false
         }
 
         $body = wp_remote_retrieve_body($response);
@@ -233,17 +148,22 @@ class EPG_Data_Model {
 
         if (json_last_error() !== JSON_ERROR_NONE) {
             error_log('Failed to decode Kodi response: ' . json_last_error_msg());
-            return false;
+            return [];  // Return an empty array instead of false
         }
 
+        $channel_map = [];
         if (isset($decoded_response['result']['channels'])) {
-            return $decoded_response['result']['channels'];
-        } elseif (isset($decoded_response['result'])) {
-            return $decoded_response['result'];
+            foreach ($decoded_response['result']['channels'] as $channel) {
+                $channel_map[$channel['channelnumber']] = [
+                    'kodi_channelid' => $channel['channelid'],
+                    'name' => $channel['label']
+                ];
+            }
         } else {
             error_log('Unexpected Kodi response format');
-            return false;
         }
+
+        return $channel_map;
     }
     
     private function map_kodi_channels_to_epg($kodi_channels, $epg_channels) {
@@ -328,9 +248,9 @@ class EPG_Data_Model {
     }
 
     public function switch_kodi_channel($channel) {
-        $kodi_url = 'http://192.168.0.3:8080/jsonrpc'; // Replace with your Kodi URL
-        $username = 'benoit'; // Replace with your Kodi username
-        $password = '14235HOTmail'; // Replace with your Kodi password
+        $kodi_url = $this->kodi_url . ':' . $this->kodi_port . '/jsonrpc';
+        $username = $this->kodi_username;
+        $password = $this->kodi_password;
 
         // Determine if $channel is an ID or a name
         $is_channel_id = is_numeric($channel);
@@ -429,5 +349,76 @@ class EPG_Data_Model {
 
     public function get_last_error() {
         return $this->last_error;
+    }
+
+    private function get_kodi_credentials() {
+        return [
+            'username' => $this->kodi_username,
+            'password' => $this->kodi_password
+        ];
+    }
+
+    private function verify_kodi_password($password) {
+        return wp_check_password($password, $this->kodi_password);
+    }
+
+    private function parse_xml_date($date_string) {
+        // Parse date string in format "20240818055956 +0200"
+        $date = DateTime::createFromFormat('YmdHis O', $date_string, $this->timezone);
+        return $date ? $date->getTimestamp() : 0;
+    }
+
+    private function parse_xml_programs($xml) {
+        $programs = [];
+        $program_count = 0;
+
+        foreach ($xml->programme as $programme) {
+            $channel_id = (string) $programme['channel'];
+            $start = $this->parse_xml_date((string) $programme['start']);
+            $stop = $this->parse_xml_date((string) $programme['stop']);
+
+            if (!isset($programs[$channel_id])) {
+                $programs[$channel_id] = [];
+            }
+
+            $programs[$channel_id][] = [
+                'title' => (string) $programme->title,
+                'sub-title' => (string) $programme->{'sub-title'},
+                'desc' => (string) $programme->desc,
+                'start' => $start,
+                'stop' => $stop,
+            ];
+
+            $program_count++;
+        }
+
+        error_log("Total programs parsed: " . $program_count);
+        error_log("Unique channels with programs: " . count($programs));
+
+        return $programs;
+    }
+
+    private function parse_m3u($m3u_content) {
+        $channels = [];
+        $lines = explode("\n", $m3u_content);
+        foreach ($lines as $line) {
+            if (strpos($line, '#EXTINF:') === 0) {
+                preg_match('/tvg-id="([^"]*)"/', $line, $id_match);
+                preg_match('/tvg-name="([^"]*)"/', $line, $name_match);
+                preg_match('/tvg-logo="([^"]*)"/', $line, $logo_match);
+                preg_match('/tvg-chno="([^"]*)"/', $line, $chno_match);
+                preg_match('/group-title="([^"]*)"/', $line, $group_match);
+                
+                $channel_id = $id_match[1] ?? '';
+                $channels[$channel_id] = [
+                    'id' => $channel_id,
+                    'name' => $name_match[1] ?? '',
+                    'logo' => $logo_match[1] ?? '',
+                    'number' => intval($chno_match[1] ?? '0'),
+                    'group' => $group_match[1] ?? 'Uncategorized'
+                ];
+            }
+        }
+        return $channels;
     }
 }

@@ -72,8 +72,6 @@ class Modern_EPG_Plugin {
         add_shortcode('modern_epg', array($this->controller, 'render_epg'));
 
         // Register AJAX handlers
-        add_action('wp_ajax_update_epg', array($this->controller, 'update_epg'));
-        add_action('wp_ajax_nopriv_update_epg', array($this->controller, 'update_epg'));
         add_action('wp_ajax_switch_channel', array($this->controller, 'switch_channel'));
         add_action('wp_ajax_nopriv_switch_channel', array($this->controller, 'switch_channel'));
 
@@ -84,6 +82,9 @@ class Modern_EPG_Plugin {
         // Add new AJAX actions
         add_action('wp_ajax_check_kodi_availability', [$this->controller, 'check_kodi_availability']);
         add_action('wp_ajax_nopriv_check_kodi_availability', [$this->controller, 'check_kodi_availability']);
+
+        // Add save settings action
+        add_action('wp_ajax_save_epg_settings', [$this->controller, 'save_epg_settings']);
     }
 
     public function enqueue_styles() {
@@ -91,12 +92,12 @@ class Modern_EPG_Plugin {
     }
 
     public function enqueue_scripts() {
-        wp_enqueue_script($this->plugin_name, MODERN_EPG_PLUGIN_URL . 'public/js/epg-frontend.js', array('jquery'), $this->version, true);
-
-        wp_localize_script($this->plugin_name, 'modernEpgData', array(
+        wp_enqueue_style('modern-epg-style', MODERN_EPG_PLUGIN_URL . 'public/css/epg-frontend.css', [], MODERN_EPG_VERSION);
+        wp_enqueue_script('modern-epg-script', MODERN_EPG_PLUGIN_URL . 'public/js/epg-frontend.js', ['jquery'], MODERN_EPG_VERSION, true);
+        wp_localize_script('modern-epg-script', 'modernEpgData', [
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('modern_epg_nonce')
-        ));
+        ]);
     }
 
     public function run() {
@@ -115,3 +116,16 @@ add_action('init', 'run_modern_epg');
 add_action('wp_footer', function() {
     echo "<!-- Modern EPG Plugin is active -->";
 });
+
+// Activation hook to set default Kodi URL
+register_activation_hook(__FILE__, 'modern_epg_activate');
+
+function modern_epg_activate() {
+    if (!get_option('modern_epg_kodi_url')) {
+        update_option('modern_epg_kodi_url', 'http://192.168.0.3');
+    }
+    if (!get_option('modern_epg_kodi_port')) {
+        update_option('modern_epg_kodi_port', '8080');
+    }
+    // Add similar checks for other options
+}

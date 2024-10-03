@@ -18,92 +18,126 @@ define('MODERN_EPG_VERSION', '2.0');
 define('MODERN_EPG_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('MODERN_EPG_PLUGIN_URL', plugin_dir_url(__FILE__));
 
-// Include core plugin files
-require_once MODERN_EPG_PLUGIN_DIR . 'includes/class-modern-epg-loader.php';
-require_once MODERN_EPG_PLUGIN_DIR . 'includes/class-modern-epg-i18n.php';
-
-// Include MVC components
+// Include necessary files
+require_once MODERN_EPG_PLUGIN_DIR . 'includes/class-kodi-connection.php';
+require_once MODERN_EPG_PLUGIN_DIR . 'includes/class-m3u-parser.php';
+require_once MODERN_EPG_PLUGIN_DIR . 'includes/class-channel-merge.php';
+require_once MODERN_EPG_PLUGIN_DIR . 'includes/class-channel-switcher.php';
 require_once MODERN_EPG_PLUGIN_DIR . 'includes/models/class-epg-data-model.php';
 require_once MODERN_EPG_PLUGIN_DIR . 'includes/views/class-epg-view.php';
 require_once MODERN_EPG_PLUGIN_DIR . 'includes/controllers/class-epg-controller.php';
+require_once MODERN_EPG_PLUGIN_DIR . 'includes/class-ajax-handler.php';
 
-// Include admin-specific files (if needed)
-if (is_admin()) {
-    require_once MODERN_EPG_PLUGIN_DIR . 'admin/class-modern-epg-admin.php';
+// Initialize logging
+function modern_epg_log($message, $level = 'INFO') {
+    error_log("Modern EPG [$level]: $message");
 }
 
-// Include public-facing files
-require_once MODERN_EPG_PLUGIN_DIR . 'public/class-modern-epg-public.php';
+// Main plugin initialization
+function initialize_modern_epg_plugin() {
+    modern_epg_log("Initializing Modern EPG Plugin", 'INFO');
 
-// Core plugin class
-class Modern_EPG_Plugin {
+    // Get plugin options
+    $options = get_option('modern_epg_options', array());
+    $kodi_url = isset($options['kodi_url']) ? $options['kodi_url'] : '';
+    $kodi_port = isset($options['kodi_port']) ? $options['kodi_port'] : '8080';
+    $kodi_username = isset($options['kodi_username']) ? $options['kodi_username'] : '';
+    $kodi_password = isset($options['kodi_password']) ? $options['kodi_password'] : '';
+    $m3u_url = isset($options['m3u_url']) ? $options['m3u_url'] : '';
+    $xml_url = isset($options['xml_url']) ? $options['xml_url'] : '';
 
-    protected $loader;
-    protected $plugin_name;
-    protected $version;
-    protected $controller;
+    modern_epg_log("M3U URL: $m3u_url", 'DEBUG');
+    modern_epg_log("XML URL: $xml_url", 'DEBUG');
 
-    public function __construct() {
-        $this->version = MODERN_EPG_VERSION;
-        $this->plugin_name = 'modern-epg-plugin';
-        
-        $this->load_dependencies();
-        $this->define_admin_hooks();
-        $this->define_public_hooks();
-    }
+    // Initialize components
+    $kodi_connection = new Kodi_Connection($kodi_url, $kodi_port, $kodi_username, $kodi_password);
+    modern_epg_log("Kodi Connection initialized. Is online: " . ($kodi_connection->is_online() ? 'Yes' : 'No'), 'DEBUG');
 
-    private function load_dependencies() {
-        // Initialize Model, View, and Controller
-        $model = new EPG_Data_Model();
-        $view = new EPG_View();
-        $this->controller = new EPG_Controller($model, $view);
-    }
+    $m3u_parser = new M3U_Parser();
+    modern_epg_log("M3U Parser initialized", 'DEBUG');
 
-    private function define_admin_hooks() {
-        // Define admin-specific hooks here, if needed
-    }
+    $channel_merge = new Channel_Merge($kodi_connection, $m3u_parser);
+    modern_epg_log("Channel Merge initialized", 'DEBUG');
 
-    private function define_public_hooks() {
-        // Enqueue public-facing styles and scripts
-        add_action('wp_enqueue_scripts', array($this, 'enqueue_styles'));
-        add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
+    $channel_switcher = new Channel_Switcher($kodi_connection);
+    modern_epg_log("Channel Switcher initialized", 'DEBUG');
 
-        // Register the EPG shortcode
-        add_shortcode('modern_epg', array($this->controller, 'render_epg'));
+    $epg_data_model = new EPG_Data_Model($kodi_connection, $m3u_parser, $channel_merge, $m3u_url, $xml_url);
+    modern_epg_log("EPG Data Model initialized", 'DEBUG');
 
-        // Register AJAX handlers
-        add_action('wp_ajax_update_epg', array($this->controller, 'update_epg'));
-        add_action('wp_ajax_nopriv_update_epg', array($this->controller, 'update_epg'));
-        add_action('wp_ajax_switch_channel', array($this->controller, 'switch_channel'));
-        add_action('wp_ajax_nopriv_switch_channel', array($this->controller, 'switch_channel'));
-    }
+    $epg_view = new EPG_View();
+    modern_epg_log("EPG View initialized", 'DEBUG');
 
-    public function enqueue_styles() {
-        wp_enqueue_style($this->plugin_name, MODERN_EPG_PLUGIN_URL . 'public/css/epg-style.css', array(), $this->version, 'all');
-    }
+    $epg_controller = new EPG_Controller($epg_data_model, $epg_view, $channel_switcher);
+    modern_epg_log("EPG Controller initialized", 'DEBUG');
 
-    public function enqueue_scripts() {
-        wp_enqueue_script($this->plugin_name, MODERN_EPG_PLUGIN_URL . 'public/js/epg-frontend.js', array('jquery'), $this->version, true);
+    // Register shortcode
+    add_shortcode('modern_epg', array($epg_controller, 'render_epg'));
 
-        wp_localize_script($this->plugin_name, 'modernEpgData', array(
-            'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('modern_epg_nonce')
-        ));
-    }
+    // Initialize AJAX handler
+    new Modern_EPG_AJAX_Handler($epg_controller, $kodi_connection);
 
-    public function run() {
-        // Any code needed to run the plugin can be placed here
-    }
+    // Register styles and scripts
+    add_action('wp_enqueue_scripts', 'enqueue_modern_epg_styles');
+    add_action('wp_enqueue_scripts', 'enqueue_modern_epg_scripts');
+
+    modern_epg_log("Modern EPG Plugin initialization complete", 'INFO');
 }
 
-// Begins execution of the plugin
-function run_modern_epg() {
-    $plugin = new Modern_EPG_Plugin();
-    $plugin->run();
+// Enqueue styles
+function enqueue_modern_epg_styles() {
+    wp_enqueue_style('modern-epg-plugin', MODERN_EPG_PLUGIN_URL . 'public/css/epg-style.css', array(), MODERN_EPG_VERSION, 'all');
 }
-add_action('init', 'run_modern_epg');
 
-// Debug: Add this to verify the plugin is loaded
+// Enqueue scripts
+function enqueue_modern_epg_scripts() {
+    wp_enqueue_script('modern-epg-plugin', MODERN_EPG_PLUGIN_URL . 'public/js/epg-frontend.js', array('jquery'), MODERN_EPG_VERSION, true);
+    wp_localize_script('modern-epg-plugin', 'modernEpgData', array(
+        'ajax_url' => admin_url('admin-ajax.php'),
+        'nonce' => wp_create_nonce('modern_epg_nonce')
+    ));
+}
+
+// Initialize the plugin
+add_action('init', 'initialize_modern_epg_plugin');
+
+// Debug: Verify the plugin is loaded
 add_action('wp_footer', function() {
     echo "<!-- Modern EPG Plugin is active -->";
 });
+
+// Plugin activation hook
+register_activation_hook(__FILE__, 'modern_epg_activate');
+
+function modern_epg_activate() {
+    $default_options = array(
+        'kodi_url' => '',
+        'kodi_port' => '',
+        'kodi_username' => '',
+        'kodi_password' => '',
+        'm3u_file_path' => ''
+    );
+    add_option('modern_epg_options', $default_options);
+}
+
+// Initialize the admin (only in admin area)
+function run_modern_epg_admin() {
+    if (is_admin()) {
+        require_once MODERN_EPG_PLUGIN_DIR . 'includes/admin/class-modern-epg-admin.php';
+        Modern_EPG_Admin::get_instance();
+    }
+}
+
+add_action('plugins_loaded', 'run_modern_epg_admin');
+
+// Ensure logs directory is writable
+$logs_dir = MODERN_EPG_PLUGIN_DIR . 'logs';
+if (!is_dir($logs_dir)) {
+    wp_mkdir_p($logs_dir);
+}
+if (!is_writable($logs_dir)) {
+    error_log("Modern EPG: Logs directory is not writable: $logs_dir");
+}
+
+// Final initialization log
+modern_epg_log("Modern EPG Plugin fully loaded", 'INFO');

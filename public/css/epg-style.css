@@ -21,6 +21,7 @@
 }
 
 .epg-container {
+    overflow-x: auto;
     margin-top: 5px;
     margin-left: 30px;
     flex-grow: 1;
@@ -50,70 +51,98 @@
 .epg {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    overflow-x: hidden;
 }
 
 .channel {
     display: flex;
-    flex-direction: row;
-    gap: 10px;
-    align-items: center;
+    margin-bottom: 10px;
 }
 
 .channel-info {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 80px;
+    width: 70px;
     flex-shrink: 0;
-}
-
-.channel-logo {
-    width: auto;
-    height: 65px;
-    object-fit: contain;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     margin-right: 10px;
 }
 
-.channel-name {
+.channel-logo {
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+    background-color: #f0f0f0;
+    border: 1px solid #ddd;
+    padding: 2px;
+}
+
+.channel-logo-placeholder {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    background-color: #f0f0f0;
+    color: #333;
     font-weight: bold;
-    font-size: 16px;
 }
 
 .programme-list-container {
-    flex-grow: 1;
     overflow-x: auto;
     width: 100%;
+    margin-left: 10px; /* Add space between channel icons and program boxes */
 }
 
 .programme-list {
-    display: grid;
-    grid-template-columns: repeat(252, minmax(20px, 1fr)); /* Adjust based on your needs */
-    gap: 1px;
+    display: inline-block;
+    position: relative;
+    width: 300%; /* 3 hours * 100% */
+    height: 60px;
 }
 
 .programme {
-    background-color: #3a3a3a;
-    color: #fff;
-    border-radius: 2px;
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background-color: #e6f3ff; /* Light blue background */
+    border: 1px solid #99ccff; /* Slightly darker blue border */
     padding: 2px;
+    box-sizing: border-box;
     overflow: hidden;
-    position: relative;
-    height: 50px;
-    cursor: pointer;
-    min-width: 25px;
+    font-size: 12px;
+    min-width: 30px; /* Ensure a minimum width for very short programs */
+    transition: background-color 0.3s;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+.programme:hover {
+    background-color: #cce6ff; /* Slightly darker blue on hover */
+}
+
+.programme.current-program {
+    border: 2px solid #ff4d4d; /* Red border for current program */
+    box-shadow: 0 0 5px rgba(255, 77, 77, 0.5); /* Subtle red glow */
 }
 
 .programme-time {
-    font-size: 12px;
-    color: #ccc;
+    font-weight: bold;
+    font-size: 10px;
+    color: #3366cc; /* Dark blue for time */
+    width: 100%;
 }
 
 .programme-title {
-    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #333;
     font-weight: bold;
-    margin-top: 5px;
+    font-size: 13px; /* Slightly bigger than before */
+    width: 100%;
 }
 
 .programme-sub-title {
@@ -141,7 +170,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.8);
+    background-color: rgba(0, 0, 0, 0.7);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -149,31 +178,96 @@
 }
 
 .popup {
-    background-color: #fff;
+    background-color: white;
     padding: 20px;
     border-radius: 5px;
     max-width: 500px;
-    text-align: center;
-}
-
-.popup h3, .popup h4 {
-    margin: 0 0 10px;
-}
-
-.popup p {
-    margin: 10px 0;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
 }
 
 .close-popup {
-    background-color: #f44336;
-    color: #fff;
-    border: none;
-    padding: 10px 20px;
+    float: right;
     cursor: pointer;
-    border-radius: 5px;
-    font-size: 14px;
+    font-size: 20px;
+    font-weight: bold;
 }
 
-.close-popup:hover {
-    background-color: #d32f2f;
+.group-filters {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 12.5px; /* Increased from 10px if needed */
+    padding: 12.5px 0; /* Increased from 10px 0 if needed */
+    background-color: #f0f0f0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.group-filter {
+    margin: 0 5px;
+    padding: 6.25px 12.5px; /* Increased from 5px 10px */
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 15px; /* Increased from 12px (assuming original size was 12px) */
+    transition: background-color 0.3s ease;
+}
+
+.group-filter img {
+    width: 25px; /* Increased from 20px */
+    height: 25px; /* Increased from 20px */
+    vertical-align: middle;
+    margin-right: 6.25px; /* Increased from 5px */
+}
+
+.group-filter.active {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.channel-name {
+    font-size: 12px;
+    text-align: center;
+    margin-top: 5px;
+    max-width: 70px; /* Match width of channel-info */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.epg-controls {
+    margin: 10px 0;
+}
+
+.epg-button {
+    background-color: #4CAF50;
+    border: none;
+    color: white;
+    padding: 15px 32px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 4px 2px;
+    cursor: pointer;
+}
+
+.channel-icon {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+}
+
+.channel-link {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
 }

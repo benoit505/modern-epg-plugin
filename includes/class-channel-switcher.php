@@ -7,30 +7,23 @@ class Channel_Switcher {
         $this->kodi_connection = $kodi_connection;
     }
 
-    public function switch_channel($channel) {
-        modern_epg_log("Attempting to switch to channel: $channel", 'DEBUG');
+    public function switch_channel($channel_id) {
+        modern_epg_log("Attempting to switch to channel ID: $channel_id", 'DEBUG');
         
         if (!$this->kodi_connection->is_online()) {
             modern_epg_log("Cannot switch channel: Kodi is offline", 'ERROR');
             return false;
         }
 
-        // Determine if $channel is an ID or a name
-        $is_channel_id = is_numeric($channel);
-        $params = $is_channel_id 
-            ? ['item' => ['channelid' => intval($channel)]]
-            : ['window' => 'tvchannels', 'parameters' => ["channel=$channel"]];
-
-        $method = $is_channel_id ? 'Player.Open' : 'GUI.ActivateWindow';
-        $response = $this->kodi_connection->send_jsonrpc_request($method, $params);
+        $result = $this->kodi_connection->switch_channel($channel_id);
         
-        if ($response === false) {
-            modern_epg_log("Failed to switch channel. Response: " . print_r($response, true), 'ERROR');
+        if ($result === true) {
+            modern_epg_log("Successfully switched to channel ID: $channel_id", 'DEBUG');
+            return true;
+        } else {
+            modern_epg_log("Failed to switch channel. Error: $result", 'ERROR');
             return false;
         }
-        
-        modern_epg_log("Channel switch response: " . json_encode($response), 'DEBUG');
-        return isset($response['result']) && $response['result'] === 'OK';
     }
 
     public function get_channel_id_by_name($channel_name) {

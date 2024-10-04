@@ -8,34 +8,39 @@ class Channel_Merge { // Changed from Channel_Merger to Channel_Merge
         $this->m3u_parser = $m3u_parser;
     }
 
-    public function merge_channel_info($m3u_channels, $kodi_channels) {
+    public function merge_channel_info($m3u_channels) {
+        $kodi_channels = $this->kodi_connection->is_online() ? $this->kodi_connection->get_channel_order() : [];
         $merged_channels = [];
 
-        foreach ($m3u_channels as $channel_id => $m3u_channel) {
-            $kodi_channel = $this->find_matching_kodi_channel($kodi_channels, $m3u_channel);
-
-            $merged_channel = [
-                'id' => $channel_id,
-                'number' => $m3u_channel['tvg_chno'] ?? '',
-                'name' => $m3u_channel['name'] ?? '',
-                'logo' => $m3u_channel['logo'] ?? '',
-                'group' => $m3u_channel['group'] ?? 'Uncategorized',
-                'kodi_id' => $kodi_channel ? $kodi_channel['channelid'] : null,
-            ];
-
-            error_log("Merged channel: " . print_r($merged_channel, true));
-
-            $merged_channels[$channel_id] = $merged_channel;
+        foreach ($m3u_channels as $m3u_channel) {
+            $merged_channel = $m3u_channel;
+            if (!empty($kodi_channels)) {
+                $kodi_channel = $this->find_matching_kodi_channel($kodi_channels, $m3u_channel);
+                if ($kodi_channel) {
+                    $merged_channel['kodi_id'] = $kodi_channel['channelid'] ?? null;
+                    $merged_channel['kodi_number'] = $kodi_channel['channelnumber'] ?? null;
+                }
+            }
+            $merged_channels[] = $merged_channel;
         }
 
+        usort($merged_channels, function($a, $b) {
+            $a_number = $a['kodi_number'] ?? $a['tvg_chno'] ?? PHP_INT_MAX;
+            $b_number = $b['kodi_number'] ?? $b['tvg_chno'] ?? PHP_INT_MAX;
+            return $a_number <=> $b_number;
+        });
+
+        // Remove or comment out this debug log
+        // modern_epg_log("Merged channels (sample): " . print_r(array_slice($merged_channels, 0, 5, true), true), 'DEBUG');
         return $merged_channels;
     }
 
     private function find_matching_kodi_channel($kodi_channels, $m3u_channel) {
-        if (!$kodi_channels) return null;
-
         foreach ($kodi_channels as $kodi_channel) {
-            if ($this->channels_match($kodi_channel, $m3u_channel)) {
+            $kodi_name = $kodi_channel['label'] ?? '';
+            $m3u_name = $m3u_channel['name'] ?? '';
+
+            if (!empty($kodi_name) && !empty($m3u_name) && strcasecmp($kodi_name, $m3u_name) === 0) {
                 return $kodi_channel;
             }
         }

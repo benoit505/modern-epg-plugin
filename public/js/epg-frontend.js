@@ -1,18 +1,59 @@
-(function() {
-    let debugMode = true; // Set to true for debugging
-    let attempts = 0;
-    const maxAttempts = 20; // Increase max attempts
+console.log('EPG Frontend JS loaded');
 
+(function() {
+    // Configuration
+    const config = {
+        debugMode: true,
+        maxAttempts: 20,
+        refreshInterval: modernEpgData.refresh_interval || 300000 // Use the value from PHP, or default to 5 minutes
+    };
+
+    // Log the refresh interval when the script loads
+    console.log(`[EPG Debug] Initial refresh interval: ${config.refreshInterval / 1000} seconds (${config.refreshInterval} ms)`);
+
+    // Utility functions
     function logDebug(...args) {
-        if (debugMode) {
-            console.log('[EPG Debug]', ...args);
-        }
+        if (config.debugMode) console.log('[EPG Debug]', ...args);
     }
 
-    // Move switchKodiChannel inside the IIFE
     function switchKodiChannel(channelId) {
-        logDebug('Switching to Kodi channel:', channelId);
+        console.log('[EPG Debug] Switching to Kodi channel:', channelId);
         
+        const data = new FormData();
+        data.append('action', 'epg_action');
+        data.append('epg_action', 'switch_kodi_channel');
+        data.append('nonce', modernEpgData.nonce);
+        data.append('channel_id', channelId);
+        
+        console.log('[EPG Debug] Sending data:', Object.fromEntries(data));
+        
+        fetch(modernEpgData.ajax_url, {
+            method: 'POST',
+            body: data
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                console.log('[EPG Debug] Successfully switched Kodi channel:', data.data.message);
+            } else {
+                console.error('[EPG Error] Error switching Kodi channel:', data.data.message);
+            }
+        })
+        .catch(error => {
+            console.error('[EPG Error] Error switching Kodi channel:', error);
+        });
+    }
+
+    function updateEPG() {
+        console.log('updateEPG called at', new Date().toISOString());
+        const currentGroup = localStorage.getItem('selectedEpgGroup') || 'all';
+        console.log('Current group before update:', currentGroup);
+
         fetch(modernEpgData.ajax_url, {
             method: 'POST',
             headers: {
@@ -20,48 +61,63 @@
             },
             body: new URLSearchParams({
                 action: 'epg_action',
-                epg_action: 'switch_kodi_channel',
+                epg_action: 'update_epg',
                 nonce: modernEpgData.nonce,
-                channel_id: channelId
+                group: currentGroup
             })
         })
-        .then(response => response.json())
+        .then(response => {
+            console.log('EPG update response status:', response.status);
+            return response.json();
+        })
         .then(data => {
-            if (data.success) {
-                logDebug('Successfully switched Kodi channel:', data.data.message);
+            console.log('EPG data received:', JSON.stringify(data, null, 2));
+            if (data.success && !data.html.startsWith('Error:')) {
+                console.log('EPG update successful, updating grid');
+                updateEPGGrid(data.html);
             } else {
-                console.error('Error switching Kodi channel:', data.data.message);
+                console.error('Error updating EPG:', data.html || data.message || 'Unknown error');
+                console.log('Debug info:', data.debug);
             }
         })
         .catch(error => {
-            console.error('Error switching Kodi channel:', error);
+            console.error('Error fetching EPG data:', error);
         });
     }
 
-    function initializeEPG() {
-        logDebug('Initializing EPG');
-        attachListeners();
-        scrollToCurrentTime();
-        applyStoredFilter();
+    function displayEPGData(epgData) {
+        console.log('Displaying EPG data');
+        const epgContainer = document.querySelector('.epg-container');
+        if (epgContainer) {
+            // Create a temporary container
+            const tempContainer = document.createElement('div');
+            tempContainer.innerHTML = epgData.html;
+            
+            // Find the new EPG content
+            const newEpgContent = tempContainer.querySelector('#modern-epg-wrapper');
+            
+            if (newEpgContent) {
+                // Replace the existing content
+                epgContainer.innerHTML = '';
+                epgContainer.appendChild(newEpgContent);
+            } else {
+                console.error('New EPG content not found in the received data');
+            }
+        } else {
+            console.error('EPG container not found');
+        }
     }
 
-    function waitForEpgContainer() {
-        const outerContainer = document.getElementById('modern-epg-container');
-        const innerContainer = document.getElementById('epg-container');
-        logDebug('Attempting to find EPG containers, attempt:', attempts + 1);
-
-        if (outerContainer && innerContainer) {
-            logDebug('EPG containers found:', outerContainer, innerContainer);
-            initializeEPG();
-        } else if (attempts < maxAttempts) {
-            attempts++;
-            setTimeout(waitForEpgContainer, 500);
-        } else {
-            console.error('EPG containers not found after', maxAttempts, 'attempts');
-            logDebug('Outer container:', outerContainer);
-            logDebug('Inner container:', innerContainer);
-            logDebug('Document body HTML:', document.body.innerHTML);
-        }
+    function reattachEventListeners() {
+        console.log('Reattaching event listeners');
+        // Remove existing listeners
+        document.querySelectorAll('.group-filter, .channel-link, .programme').forEach(el => {
+            el.replaceWith(el.cloneNode(true));
+        });
+        
+        // Reattach listeners
+        attachListeners();
+        setupEventListeners();
     }
 
     function documentReady(fn) {
@@ -71,11 +127,6 @@
             document.addEventListener("DOMContentLoaded", fn);
         }
     }
-
-    documentReady(function() {
-        logDebug('Document ready, starting EPG initialization');
-        waitForEpgContainer();
-    });
 
     function attachListeners() {
         logDebug('Attaching listeners');
@@ -146,46 +197,8 @@
         }
     }
 
-    function updateEPG() {
-        logDebug('updateEPG called at', new Date());
-        const currentGroup = localStorage.getItem('selectedEpgGroup') || 'all';
-        logDebug('Current group before update:', currentGroup);
-
-        fetch(modernEpgData.ajax_url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: new URLSearchParams({
-                action: 'update_epg',
-                nonce: modernEpgData.nonce,
-                group: currentGroup // Send the current group to the server
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            logDebug('EPG update response:', data);
-            if (data.success) {
-                const epgContainer = document.getElementById('modern-epg-container');
-                if (epgContainer) {
-                    epgContainer.innerHTML = data.data.html;
-                    logDebug('EPG HTML updated');
-                    initializeEPG();
-                    filterChannels(currentGroup); // Re-apply the filter
-                    updateActiveGroupButton(currentGroup); // Update the active button
-                } else {
-                    logDebug('EPG container not found in the DOM');
-                }
-            } else {
-                console.error('Error updating EPG:', data.data);
-            }
-        })
-        .catch(error => console.error('Error updating EPG:', error));
-    }
-
     function updateActiveGroupButton(group) {
-        const buttons = document.querySelectorAll('.group-filter');
-        buttons.forEach(button => {
+        document.querySelectorAll('.group-filter').forEach(button => {
             if (button.dataset.group === group) {
                 button.classList.add('active');
             } else {
@@ -218,9 +231,6 @@
                 box.classList.remove('current-program');
             }
         });
-
-        // Remove this line to reduce logging
-        // logDebug('Adjusted program boxes at', now);
     }
 
     function scrollToCurrentTime() {
@@ -240,21 +250,13 @@
     }
 
     function filterChannels(group) {
-        const epgContainer = document.getElementById('epg-container');
-        if (!epgContainer) {
-            console.error('[EPG Error] EPG container not found');
-            return;
-        }
-
-        const channels = epgContainer.querySelectorAll('.channel');
+        logDebug('Filtering channels for group:', group);
+        const channels = document.querySelectorAll('.channel');
         let visibleCount = 0;
 
         channels.forEach(channel => {
             const channelGroup = channel.dataset.group;
-            const channelNumber = channel.dataset.channelNumber;
-            logDebug(`Channel: ${channelNumber}, Group: ${channelGroup}`);
-
-            if (group.toLowerCase() === 'all' || channelGroup.toLowerCase() === group.toLowerCase()) {
+            if (group === 'all' || channelGroup === group) {
                 channel.style.display = '';
                 visibleCount++;
             } else {
@@ -263,40 +265,30 @@
         });
 
         logDebug('Visible channels after filtering:', visibleCount);
-        logDebug('Selected group:', group);
-
-        // Store the selected group
         localStorage.setItem('selectedEpgGroup', group);
     }
 
     function showProgramDetails(event) {
-        logDebug('showProgramDetails called', event);
         const program = event.currentTarget;
-        logDebug('Program data:', program.dataset);
-        const title = program.dataset.title;
-        const startTime = new Date(program.dataset.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        const endTime = new Date(program.dataset.endTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        const description = program.dataset.description || 'No description available.';
-
-        const popupHTML = `
-            <div class="popup-overlay">
-                <div class="popup">
-                    <span class="close-popup">&times;</span>
-                    <h3>${title}</h3>
-                    <p><strong>Time:</strong> ${startTime} - ${endTime}</p>
-                    <p>${description}</p>
-                </div>
+        const popupContent = `
+            <div class="popup">
+                <span class="close-popup">&times;</span>
+                <h3>${program.dataset.title}</h3>
+                <p><strong>Time:</strong> ${new Date(program.dataset.startTime).toLocaleString()} - ${new Date(program.dataset.endTime).toLocaleString()}</p>
+                <p>${program.dataset.description}</p>
             </div>
         `;
 
-        document.body.insertAdjacentHTML('beforeend', popupHTML);
+        const popupOverlay = document.createElement('div');
+        popupOverlay.className = 'popup-overlay';
+        popupOverlay.innerHTML = popupContent;
 
-        // Add event listener to close button
-        document.querySelector('.close-popup').addEventListener('click', closePopup);
-        document.querySelector('.popup-overlay').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closePopup();
-            }
+        document.body.appendChild(popupOverlay);
+
+        const closePopup = () => popupOverlay.remove();
+        popupOverlay.querySelector('.close-popup').addEventListener('click', closePopup);
+        popupOverlay.addEventListener('click', (e) => {
+            if (e.target === popupOverlay) closePopup();
         });
     }
 
@@ -309,59 +301,132 @@
 
     function initEPG() {
         console.log('[EPG Debug] Initializing EPG');
-        const epgContainer = document.getElementById('modern-epg-container');
-        if (!epgContainer) {
-            console.error('[EPG Error] EPG container not found');
+        const epgWrapper = document.getElementById('modern-epg-wrapper');
+        if (!epgWrapper) {
+            console.error('[EPG Error] EPG wrapper not found');
             return;
         }
-        // ... rest of your initialization code ...
+        
+        const epgContainer = epgWrapper.querySelector('.epg-container');
+        if (!epgContainer) {
+            console.error('[EPG Error] EPG container not found within wrapper');
+            return;
+        }
+        
+        const kodiOnline = epgWrapper.dataset.kodiOnline === 'true';
+        logDebug('Kodi online status:', kodiOnline);
+
+        if (!kodiOnline) {
+            console.log('Kodi is offline. Some features may be limited.');
+            disableKodiDependentFeatures();
+        } else {
+            enableChannelSwitching();
+        }
+
+        setupEventListeners();
+        const storedGroup = localStorage.getItem('selectedEpgGroup') || 'all';
+        filterChannels(storedGroup);
+        updateActiveGroupButton(storedGroup);
+        adjustProgramBoxes();
+        scrollToCurrentTime();
+        setupEPGRefresh();
+        attachProgramClickListeners();
     }
 
-    // Call initEPG when the DOM is ready
-    document.addEventListener('DOMContentLoaded', initEPG);
-
-    document.addEventListener('DOMContentLoaded', function() {
+    function disableKodiDependentFeatures() {
+        // Disable channel switching buttons or other Kodi-dependent features
         const channelLinks = document.querySelectorAll('.channel-link');
-        
         channelLinks.forEach(link => {
+            link.classList.add('disabled');
+            link.addEventListener('click', (e) => e.preventDefault());
+        });
+    }
+
+    function enableChannelSwitching() {
+        document.querySelectorAll('.channel-link').forEach(link => {
             link.addEventListener('click', function(e) {
                 e.preventDefault();
-                const kodiChannelId = this.dataset.kodiChannelId;
-                const channelName = this.dataset.channelName;
-                
-                if (kodiChannelId && kodiChannelId !== 'undefined') {
-                    console.log(`Switching to channel: ${channelName} (Kodi ID: ${kodiChannelId})`);
-                    switchKodiChannel(kodiChannelId);
-                } else {
-                    console.log(`No Kodi channel ID available for ${channelName}`);
+                const channelId = this.dataset.kodiChannelId;
+                if (channelId) {
+                    switchKodiChannel(channelId);
                 }
             });
         });
-    });
+    }
 
-    function switchKodiChannel(channelId) {
-        fetch(modernEpgData.ajax_url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: new URLSearchParams({
-                action: 'epg_action',
-                epg_action: 'switch_kodi_channel',
-                nonce: modernEpgData.nonce,
-                channel_id: channelId
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                console.log('Successfully switched Kodi channel:', data.data.message);
-            } else {
-                console.error('Error switching Kodi channel:', data.data.message);
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
+    function setupEventListeners() {
+        console.log('Setting up event listeners');
+        document.querySelectorAll('.group-filter').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                const group = this.dataset.group;
+                filterChannels(group);
+                updateActiveGroupButton(group);
+            });
         });
     }
+
+    function setupEPGRefresh() {
+        logDebug('Setting up EPG refresh');
+        setInterval(updateEPG, config.refreshInterval);
+        logDebug('EPG refresh set to run every', config.refreshInterval / 1000, 'seconds');
+    }
+
+    function updateEPGGrid(html) {
+        if (!html) {
+            console.error('No HTML content provided to updateEPGGrid');
+            return;
+        }
+        console.log('Received HTML content:', html.substring(0, 100) + '...');
+        const epgGrid = document.querySelector('.epg');
+        if (epgGrid) {
+            console.log('Current EPG grid content:', epgGrid.innerHTML.substring(0, 100) + '...');
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            const newGrid = tempDiv.querySelector('.epg');
+            if (newGrid) {
+                console.log('New EPG grid found, content:', newGrid.innerHTML.substring(0, 100) + '...');
+                if (epgGrid.innerHTML !== newGrid.innerHTML) {
+                    console.log('EPG content has changed, updating DOM');
+                    epgGrid.innerHTML = newGrid.innerHTML;
+                    attachProgramClickListeners();
+                    console.log('EPG grid updated and listeners reattached');
+                } else {
+                    console.log('EPG content unchanged, no update needed');
+                }
+            } else {
+                console.error('New EPG grid not found in the received data');
+            }
+        } else {
+            console.error('EPG grid not found in the current DOM');
+        }
+    }
+
+    function reattachGridEventListeners() {
+        console.log('Reattaching grid event listeners');
+        document.querySelectorAll('.programme').forEach(program => {
+            program.removeEventListener('click', showProgramDetails);
+            program.addEventListener('click', showProgramDetails);
+            console.log('Event listener attached to program:', program.dataset.title);
+        });
+        document.querySelectorAll('.channel-link').forEach(link => {
+            link.removeEventListener('click', handleChannelSwitch);
+            link.addEventListener('click', handleChannelSwitch);
+        });
+    }
+
+    function attachProgramClickListeners() {
+        console.log('Attaching program click listeners');
+        document.querySelectorAll('.programme').forEach(program => {
+            program.removeEventListener('click', showProgramDetails);
+            program.addEventListener('click', showProgramDetails);
+        });
+        console.log('Program click listeners attached');
+    }
+
+    document.addEventListener('DOMContentLoaded', initEPG);
+    document.addEventListener('DOMContentLoaded', function() {
+        // Your initialization code here
+        console.log('Modern EPG JavaScript initialized');
+    });
 })();

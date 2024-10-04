@@ -14,84 +14,107 @@ if (!function_exists('modern_epg_log')) {
 }
 
 class Kodi_Connection {
-    private $kodi_url;
+    private $ip;
+    private $port;
     private $username;
     private $password;
+    private $connection_timeout = 5; // Reduced timeout to 5 seconds
+    private $last_check_time = 0;
+    private $check_interval = 600; // 10 minutes in seconds
 
-    public function __construct($kodi_url, $kodi_port, $username, $password) {
-        $this->kodi_url = rtrim($kodi_url, '/') . ':' . $kodi_port . '/jsonrpc';
+    public function __construct($ip, $port, $username, $password) {
+        $this->ip = $ip;
+        $this->port = $port;
         $this->username = $username;
         $this->password = $password;
     }
 
     public function is_online() {
-        $result = $this->send_request('JSONRPC.Ping');
-        return ($result !== false && isset($result['result']) && $result['result'] === 'pong');
-    }
+        $current_time = time();
+        $cached_status = get_transient('kodi_connection_status');
 
-    public function get_channel_order() {
-        $result = $this->send_request('PVR.GetChannels', ['channelgroupid' => 'alltv']);
-        
-        if ($result !== false && isset($result['result']['channels']) && is_array($result['result']['channels'])) {
-            modern_epg_log('Kodi channels retrieved successfully. Count: ' . count($result['result']['channels']), 'DEBUG');
-            if (!empty($result['result']['channels'])) {
-                modern_epg_log('Sample channel data: ' . print_r($result['result']['channels'][0], true), 'DEBUG');
-            }
-            return $result['result']['channels'];
-        } else {
-            modern_epg_log('Failed to get channel order from Kodi', 'ERROR');
-            return [];
+        if ($cached_status !== false && ($current_time - $this->last_check_time) < $this->check_interval) {
+            return $cached_status === 'online';
+        }
+
+        $this->last_check_time = $current_time;
+
+        try {
+            $response = $this->send_request('JSONRPC.Ping', [], true);
+            $is_online = isset($response['result']) && $response['result'] === 'pong';
+            set_transient('kodi_connection_status', $is_online ? 'online' : 'offline', $this->check_interval);
+            return $is_online;
+        } catch (Exception $e) {
+            modern_epg_log("Kodi connection check failed: " . $e->getMessage(), 'WARNING');
+            set_transient('kodi_connection_status', 'offline', $this->check_interval);
+            return false;
         }
     }
 
-    public function get_channel_map() {
-        $channels = $this->get_channel_order();
-        $channel_map = [];
-        foreach ($channels as $channel) {
-            $channel_map[$channel['channelid']] = $channel;
+    public function send_request($method, $params = [], $ignore_offline = false) {
+        if (!$ignore_offline && !$this->is_online()) {
+            throw new Exception("Kodi is offline");
         }
-        return $channel_map;
-    }
 
-    private function build_url($method) {
-        return "http://{$this->url}:{$this->port}/jsonrpc";
-    }
-
-    private function send_request($method, $params = []) {
-        $request = [
+        $url = "http://{$this->ip}:{$this->port}/jsonrpc";
+        $data = json_encode([
             'jsonrpc' => '2.0',
             'method' => $method,
             'params' => $params,
             'id' => 1
-        ];
+        ]);
 
-        $json_request = json_encode($request);
-        error_log("Kodi_Connection: Sending request to Kodi: " . $json_request);
-
-        $ch = curl_init($this->kodi_url);
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $json_request);
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Content-Type: application/json',
-            'Content-Length: ' . strlen($json_request)
+            'Authorization: Basic ' . base64_encode($this->username . ':' . $this->password)
         ]);
-        curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
-        curl_setopt($ch, CURLOPT_USERPWD, $this->username . ":" . $this->password);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->connection_timeout);
 
-        $result = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-        if ($result === false) {
-            error_log("Kodi_Connection: cURL error: " . curl_error($ch));
-        } else {
-            error_log("Kodi_Connection: HTTP response code: " . $http_code);
-            error_log("Kodi_Connection: Response from Kodi: " . $result);
-        }
-
+        $response = curl_exec($ch);
         curl_close($ch);
 
-        return json_decode($result, true);
+        if (curl_errno($ch)) {
+            throw new Exception(curl_error($ch));
+        }
+
+        $result = json_decode($response, true);
+
+        if (isset($result['error'])) {
+            throw new Exception($result['error']['message']);
+        }
+
+        return $result;
+    }
+
+    public function get_channel_order() {
+        try {
+            $response = $this->send_request('PVR.GetChannels', ['channelgroupid' => 'alltv']);
+            if (isset($response['result']['channels'])) {
+                return $response['result']['channels'];
+            }
+        } catch (Exception $e) {
+            modern_epg_log("Failed to get channel order from Kodi: " . $e->getMessage(), 'WARNING');
+        }
+        return [];
+    }
+
+    public function get_channel_map() {
+        try {
+            $channels = $this->get_channel_order();
+            $channel_map = [];
+            foreach ($channels as $channel) {
+                $channel_map[$channel['channelid']] = $channel['label'];
+            }
+            return $channel_map;
+        } catch (Exception $e) {
+            modern_epg_log("Failed to get channel map from Kodi: " . $e->getMessage(), 'WARNING');
+            return [];
+        }
     }
 
     public function switch_channel($channel_id) {

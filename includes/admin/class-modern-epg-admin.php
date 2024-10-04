@@ -1,7 +1,7 @@
 <?php
 class Modern_EPG_Admin {
     private static $instance = null;
-    private $options; // Declare the options property
+    private $options;
 
     public static function get_instance() {
         if (null === self::$instance) {
@@ -13,7 +13,7 @@ class Modern_EPG_Admin {
     protected function __construct() {
         add_action('admin_menu', array($this, 'add_plugin_page'));
         add_action('admin_init', array($this, 'page_init'));
-        $this->options = get_option('modern_epg_options', array()); // Initialize options
+        $this->options = get_option('modern_epg_options', array());
     }
 
     public function add_plugin_page() {
@@ -27,14 +27,6 @@ class Modern_EPG_Admin {
     }
 
     public function create_admin_page() {
-        static $form_rendered = false;
-
-        if ($form_rendered) {
-            return;
-        }
-
-        $form_rendered = true;
-
         ?>
         <div class="wrap">
             <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
@@ -50,14 +42,6 @@ class Modern_EPG_Admin {
     }
 
     public function page_init() {
-        static $settings_registered = false;
-
-        if ($settings_registered) {
-            return;
-        }
-
-        $settings_registered = true;
-
         register_setting(
             'modern_epg_option_group',
             'modern_epg_options',
@@ -118,6 +102,14 @@ class Modern_EPG_Admin {
             'modern-epg',
             'modern_epg_setting_section'
         );
+
+        add_settings_field(
+            'refresh_interval', 
+            'EPG Refresh Interval (seconds)', 
+            array($this, 'refresh_interval_callback'), 
+            'modern-epg',
+            'modern_epg_setting_section'
+        );
     }
 
     public function sanitize($input) {
@@ -134,11 +126,13 @@ class Modern_EPG_Admin {
             $sanitized_input['m3u_url'] = esc_url_raw($input['m3u_url']);
         if(isset($input['xml_url']))
             $sanitized_input['xml_url'] = esc_url_raw($input['xml_url']);
+        if(isset($input['refresh_interval']))
+            $sanitized_input['refresh_interval'] = absint($input['refresh_interval']);
         return $sanitized_input;
     }
 
     public function print_section_info() {
-        print 'Enter your Kodi settings below:';
+        print 'Enter your settings below:';
     }
 
     public function kodi_url_callback() {
@@ -179,5 +173,14 @@ class Modern_EPG_Admin {
         $options = get_option('modern_epg_options');
         $xml_url = isset($options['xml_url']) ? $options['xml_url'] : '';
         echo "<input type='text' name='modern_epg_options[xml_url]' value='{$xml_url}' class='regular-text' />";
+    }
+
+    public function refresh_interval_callback() {
+        $value = isset($this->options['refresh_interval']) ? $this->options['refresh_interval'] : 300; // Default to 300 seconds (5 minutes)
+        printf(
+            '<input type="number" id="modern_epg_refresh_interval" name="modern_epg_options[refresh_interval]" value="%s" min="30" />',
+            esc_attr($value)
+        );
+        echo '<p class="description">Minimum value is 30 seconds. Recommended: 120-300 seconds.</p>';
     }
 }

@@ -1,11 +1,9 @@
 <?php
 class Modern_EPG_AJAX_Handler {
     private $controller;
-    private $kodi_connection;
 
-    public function __construct($controller, $kodi_connection) {
+    public function __construct($controller) {
         $this->controller = $controller;
-        $this->kodi_connection = $kodi_connection;
         $this->init();
     }
 
@@ -15,7 +13,10 @@ class Modern_EPG_AJAX_Handler {
     }
 
     public function handle_ajax() {
-        check_ajax_referer('modern_epg_nonce', 'nonce');
+        if (!check_ajax_referer('modern_epg_nonce', 'nonce', false)) {
+            wp_send_json_error(['message' => 'Invalid nonce']);
+            return;
+        }
         
         $action = isset($_POST['epg_action']) ? sanitize_text_field($_POST['epg_action']) : '';
         
@@ -23,30 +24,41 @@ class Modern_EPG_AJAX_Handler {
             case 'switch_kodi_channel':
                 $this->switch_kodi_channel();
                 break;
+            case 'update_epg':
+                $this->update_epg();
+                break;
             default:
-                if (method_exists($this->controller, 'handle_ajax_request')) {
-                    $this->controller->handle_ajax_request($action);
-                } else {
-                    wp_send_json_error(['message' => 'Invalid action']);
-                }
+                wp_send_json_error(['message' => 'Invalid action']);
                 break;
         }
     }
 
     private function switch_kodi_channel() {
-        $channel_id = isset($_POST['channel_id']) ? intval($_POST['channel_id']) : 0;
-
-        if ($channel_id <= 0) {
-            wp_send_json_error(['message' => 'Invalid channel ID']);
+        modern_epg_log("AJAX handler: switch_kodi_channel called", 'DEBUG');
+        
+        if (!isset($_POST['channel_id'])) {
+            modern_epg_log("AJAX handler: Missing channel_id", 'ERROR');
+            wp_send_json_error(['message' => 'Missing channel_id']);
             return;
         }
-
-        $result = $this->kodi_connection->switch_channel($channel_id);
-
-        if ($result === true) {
-            wp_send_json_success(['message' => 'Channel switched successfully']);
+        
+        $channel_id = intval($_POST['channel_id']);
+        modern_epg_log("AJAX handler: Attempting to switch to channel ID: $channel_id", 'DEBUG');
+        
+        $result = $this->controller->handle_channel_switch($channel_id);
+        
+        if ($result) {
+            modern_epg_log("AJAX handler: Channel switched successfully to ID: $channel_id", 'DEBUG');
+            wp_send_json_success(['message' => "Channel switched successfully to ID: $channel_id"]);
         } else {
-            wp_send_json_error(['message' => 'Failed to switch channel: ' . $result]);
+            modern_epg_log("AJAX handler: Failed to switch channel to ID: $channel_id", 'ERROR');
+            wp_send_json_error(['message' => "Failed to switch channel to ID: $channel_id"]);
         }
+    }
+
+    private function update_epg() {
+        $group = isset($_POST['group']) ? sanitize_text_field($_POST['group']) : 'all';
+        $result = $this->controller->update_epg($group);
+        wp_send_json($result);  // Send the entire result, don't modify it
     }
 }
